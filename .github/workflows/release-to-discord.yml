@@ -1,0 +1,41 @@
+name: Publish release changelog to Discord
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send release to Olho do Void Worker
+        env:
+          ENDPOINT: https://prime-void-discord.tufabook.workers.dev/release-changelog
+          CHANGELOG_SECRET: ${{ secrets.PRIME_VOID_CHANGELOG_SECRET }}
+          RELEASE_VERSION: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          python - <<'PY'
+          import json, os
+          payload = {
+              "version": os.environ.get("RELEASE_VERSION", ""),
+              "name": os.environ.get("RELEASE_NAME", ""),
+              "url": os.environ.get("RELEASE_URL", ""),
+              "body": os.environ.get("RELEASE_BODY", ""),
+          }
+          with open("payload.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, ensure_ascii=False)
+          PY
+
+          curl --fail-with-body \
+            --retry 3 \
+            --retry-all-errors \
+            -X POST "$ENDPOINT" \
+            -H "Authorization: Bearer $CHANGELOG_SECRET" \
+            -H "Content-Type: application/json" \
+            --data-binary @payload.json
